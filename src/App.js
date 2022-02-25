@@ -1,25 +1,7 @@
 import cv from "@techstark/opencv-js";
 import React, { useState, useRef, useEffect } from "react";
 
-//1.Create a canvas, img, input button
-//2. create a ref for canvas and img
-//3. create a draw function to render dots clicked by a person
-//4. create logic for registering more dots through an array
-//5. push the canvas image into opencv and do the watershed oneliner
-
-/*
-  Making PURE functions 
-  a. load image, set it in global ref
-  b. clicked points (allow add/remove): store both lists (internal/external points) in global ref
-       color external clicked points as green
-       color internal clicked points as blue
-  c. draw image (original) + clicked points (internal/external)
-       ? can we use a function to avoid for(for) loops over pixels?
-  d. watershed: f(imgRef/img, clicked_inside, clicked_outside) -> "area-separated image"
-
  
-  */
-
  
 
 //UTILITY FUNCTIONS
@@ -88,6 +70,28 @@ const App = () => {
     let img = cv.imread(imgSrc);
     cv.cvtColor(img, img, cv.COLOR_RGBA2RGB, 0);
 
+
+    //--------------
+    //This part only improves the segmentation quality of the watershed pipeline and is strictly not necessary for the watershed algorithm to work
+    let edges = new cv.Mat()
+    let gray_img = img.clone()
+    cv.cvtColor(gray_img, gray_img, cv.COLOR_RGB2GRAY, 0);
+    //Take read image through morphology pipeline for higher quality segmentation
+    
+
+    
+    cv.Canny(gray_img, edges, 50, 210)
+
+    let kernel = cv.matFromArray(3,3,cv.CV_8U, [255, 255, 255, 255, 8, 255, 255, 255, 255]) 
+    cv.morphologyEx(edges, img, cv.MORPH_CLOSE, kernel, new cv.Point(0, 0), 1)
+    cv.bitwise_not(img, img)
+    cv.cvtColor(img, img, cv.COLOR_RGBA2RGB, 0);
+    //--------------
+
+
+
+
+
     let marked_img = new cv.Mat.zeros(img.cols, img.rows, cv.CV_32S); //(width, height)
     
 
@@ -114,13 +118,19 @@ const App = () => {
       }
     }
 
+    
+    
+
     //marked_img needs to be CV_32S for the watershed algorithm
-    cv.watershed(img, marked_img);
+     cv.watershed(img, marked_img);
+
+
 
     //Uint (CV_8U) necessary for imshow of the marked image
     marked_img.convertTo(marked_img, cv.CV_8U)
     cv.cvtColor(marked_img, img, cv.COLOR_RGBA2RGB, 0);
-    cv.imshow(waterShedRef.current, marked_img);
+    cv.imshow(waterShedRef.current, img);
+
 
  
  
@@ -129,6 +139,9 @@ const App = () => {
     // need to release them manually
     img.delete();
     marked_img.delete();
+    edges.delete();
+    gray_img.delete();
+    kernel.delete();
    
   };
  
@@ -221,3 +234,7 @@ const App = () => {
   );
 };
 export default App;
+
+
+
+ 
