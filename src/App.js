@@ -32,7 +32,7 @@ const deleteImgDots = (x,y) => {
 const App = () => {
   //IMPORTANT PARAMETERS 
   const LPP_IN_METERS = 265
-  const DRAUGHT_IN_METERS  = 15 //vertical distance between waterline and bottom of the hull
+  const DRAUGHT_IN_METERS  = 35 //vertical distance between waterline and bottom of the hull
 
   //CLICKED PARAMETERS
   const LPP_x_min = 105
@@ -162,12 +162,11 @@ const App = () => {
     kernel.delete();
    
   };
-
-
+   
 
   //GET AREA-SEGMENTS:
-  //TODO: SORT ALL CONTOURS BASED ON BIGGEST AREAS DOWN TO SMALLEST AREA
-  //TODO: look into the bug happening with semisub_complicated_air
+  //TODO: look into the bug happening with semisub_complicated_air - comes because in this example the "bottomline" is hardcoded for a monohull vessel for testing ofcourse in the real application
+  //the user will be able to choose this
   const processWindCurrentAreaSegments = (segmentedImgSrc, originalImageSrc) => {
     let img = cv.imread(segmentedImgSrc);
     let unedited_img = cv.imread(originalImageSrc);
@@ -177,7 +176,6 @@ const App = () => {
     let c_contours = new cv.MatVector();
     let c_hierarchy = new cv.Mat();
     
-
 
     //find midship index
     let LPP_LENGTH_PIXELS = LPP_x_max - LPP_x_min
@@ -203,19 +201,35 @@ const App = () => {
     //wind contours
     cv.findContours(wind_segment, w_contours, w_hierarchy,cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     cv.drawContours(wind_segment, w_contours, 0, [255, 0, 0, 255], 1, cv.LINE_8, w_hierarchy, 100)
-    
-    //wind centroid and area
-    let cx_wind = cv.moments(w_contours.get(0), false).m10/cv.moments(w_contours.get(0), false).m00
-    let cy_wind = cv.moments(w_contours.get(0), false).m01/cv.moments(w_contours.get(0), false).m00
 
     //current contours
     cv.findContours(current_segment, c_contours, c_hierarchy,cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     cv.drawContours(current_segment, c_contours, 0, [255, 0, 0, 255], 1, cv.LINE_8, c_hierarchy, 100)
 
      
-    //current centroid and area
-    let cx_current = cv.moments(c_contours.get(0), false).m10/cv.moments(c_contours.get(0), false).m00
-    let cy_current = cv.moments(c_contours.get(0), false).m01/cv.moments(c_contours.get(0), false).m00
+    //sort contours from biggest area to lowest, this way we know which index indicates the correct 
+    let contour_w_array = []
+    
+    for (let i = 0; i < w_contours.size(); i++){
+      contour_w_array.push({area: cv.contourArea(w_contours.get(i)), index: i, contour: w_contours.get(i)})
+    }
+    console.log("NOT SORTED:", contour_w_array)
+    contour_w_array = contour_w_array.sort((a, b) => {return  parseFloat(b.area) - parseFloat(a.area)}) //descending order
+
+    let contour_c_array = []
+    for (let i = 0; i < c_contours.size(); i++){
+      contour_c_array.push({area: cv.contourArea(c_contours.get(i)), index: i, contour: c_contours.get(i)})
+    }
+    contour_c_array = contour_c_array.sort((a, b) => {return  parseFloat(b.area) - parseFloat(a.area)}) //descending order
+
+    console.log(contour_w_array)
+    //wind centroid
+    let cx_wind = cv.moments(contour_w_array[0].contour, false).m10/cv.moments(contour_w_array[0].contour, false).m00
+    let cy_wind = cv.moments(contour_w_array[0].contour, false).m01/cv.moments(contour_w_array[0].contour, false).m00
+
+    //current centroid
+    let cx_current = cv.moments(contour_c_array[0].contour, false).m10/cv.moments(contour_c_array[0].contour, false).m00
+    let cy_current = cv.moments(contour_c_array[0].contour, false).m01/cv.moments(contour_c_array[0].contour, false).m00
 
     //display the end result
     cv.drawContours(unedited_img, w_contours, -1, [0, 255, 0, 255], -1)
@@ -225,18 +239,15 @@ const App = () => {
     cv.circle(unedited_img, new cv.Point(xMidshipIndex,(cy_wind + cy_current)/2), 2, [255, 255, 255, 255], 5) //midship centroid
     
     //wind and current areas in meter
-
-    
-
-    let pixel_wind_area    = cv.contourArea(w_contours.get(0))
-    let pixel_current_area = cv.contourArea(c_contours.get(0))
+    let pixel_wind_area    = contour_w_array[0].area
+    let pixel_current_area = contour_c_array[0].area
 
     let wind_air_area    = 0
     let current_air_area = 0
 
     //assumes that 0 is outer_contour (if sorted properly)
-    if(w_contours.size() > 1){for (let i = 1; i < w_contours.size(); i++){wind_air_area+= cv.contourArea(w_contours.get(i));}}
-    if(c_contours.size() > 1){for (let i = 1; i < c_contours.size(); i++){current_air_area += cv.contourArea(c_contours.get(i));}}
+    if(w_contours.size() > 1){for (let i = 1; i < w_contours.size(); i++){wind_air_area+= contour_w_array[i].area}}
+    if(c_contours.size() > 1){for (let i = 1; i < c_contours.size(); i++){current_air_area += contour_c_array[i].area}}
     
     //removing air areas
     pixel_wind_area = pixel_wind_area - wind_air_area
